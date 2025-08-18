@@ -228,6 +228,8 @@ func main() {
 	setupLog.Info("Setup manager")
 	restConfig := ctrl.GetConfigOrDie()
 	restConfig.UserAgent = userAgent
+	restConfig.QPS = *config.QPS
+	restConfig.Burst = *config.Burst
 	mgr, err := ctrl.NewManager(restConfig, options)
 	exitOnError(err, "unable to start manager")
 
