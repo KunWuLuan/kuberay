@@ -378,10 +378,18 @@ func (es *EventServer) flushEventsInternal(eventsToFlush []Event) {
 	}
 
 	totalEvents := len(eventsToFlush)
-	logrus.Infof("Successfully flushed %d events to storage (%d node events, %d job events)",
-		totalEvents,
-		countEventsInMap(nodeEventsByHour),
-		countEventsInMap(jobEventsByHour))
+	errorCount := len(errChan)
+	if errorCount > 0 {
+		logrus.Warnf("Attempted to flush %d events to storage, but %d upload tasks failed (%d node events, %d job events)",
+			totalEvents, errorCount,
+			countEventsInMap(nodeEventsByHour),
+			countEventsInMap(jobEventsByHour))
+	} else {
+		logrus.Infof("Successfully flushed %d events to storage (%d node events, %d job events)",
+			totalEvents,
+			countEventsInMap(nodeEventsByHour),
+			countEventsInMap(jobEventsByHour))
+	}
 }
 
 // countEventsInMap counts total events in map
