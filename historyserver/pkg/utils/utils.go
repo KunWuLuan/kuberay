@@ -198,6 +198,15 @@ const (
 	connector = "_"
 )
 
+const (
+	// defaultMaxRetryAttempts controls how many times we retry reading
+	// local Ray metadata files (e.g. session dir, node id) before failing.
+	defaultMaxRetryAttempts = 3
+	// defaultInitialRetryDelay is the base delay before the first retry.
+	// Subsequent retries use an exponential backoff based on this value.
+	defaultInitialRetryDelay = 5 * time.Second
+)
+
 func AppendRayClusterNameID(rayClusterName, rayClusterID string) string {
 	return fmt.Sprintf("%s%s%s", rayClusterName, connector, rayClusterID)
 }
@@ -212,12 +221,17 @@ func GetRarClusterNameAndID(rayClusterNameID string) (string, string) {
 
 func GetSessionDir() (string, error) {
 	session_latest_path := "/tmp/ray/session_latest"
-	for i := 0; i < 12; i++ {
+	for i := 0; i < defaultMaxRetryAttempts; i++ {
 		rp, err := os.Readlink(session_latest_path)
 		if err != nil {
 			logrus.Errorf("read session_latest file error %v", err)
-			time.Sleep(time.Second * 5)
-			continue
+			if i < defaultMaxRetryAttempts-1 {
+				// Apply exponential backoff between retries. We use bit shift to compute 2 to the power of i.
+				backoff := time.Duration(1<<i) * defaultInitialRetryDelay
+				time.Sleep(backoff)
+				continue
+			}
+			break
 		}
 		return rp, nil
 	}
@@ -225,12 +239,17 @@ func GetSessionDir() (string, error) {
 }
 
 func GetRayNodeID() (string, error) {
-	for i := 0; i < 12; i++ {
+	for i := 0; i < defaultMaxRetryAttempts; i++ {
 		nodeidBytes, err := os.ReadFile("/tmp/ray/raylet_node_id")
 		if err != nil {
 			logrus.Errorf("read nodeid file error %v", err)
-			time.Sleep(time.Second * 5)
-			continue
+			if i < defaultMaxRetryAttempts-1 {
+				// Apply exponential backoff between retries. We use bit shift to compute 2 to the power of i.
+				backoff := time.Duration(1<<i) * defaultInitialRetryDelay
+				time.Sleep(backoff)
+				continue
+			}
+			break
 		}
 		return strings.Trim(string(nodeidBytes), "\n"), nil
 	}
