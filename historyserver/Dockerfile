@@ -2,24 +2,24 @@ ARG TARGETOS
 ARG TARGETARCH
 
 FROM --platform=$BUILDPLATFORM golang:1.25.1 as builder
-ENV GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=https://proxy.golang.org,direct
 ARG BUILD_RAYSERVER_DASHBOARD
 
 RUN if [ "$BUILD_RAYSERVER_DASHBOARD" = "yes" ] ; then \
- curl -o install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh && chmod +x install.sh && ./install.sh && /bin/bash -c "source $HOME/.nvm/nvm.sh && nvm install 14 && nvm use 14" ;\
-else \
- echo "$BUILD_RAYSERVER_DASHBOARD not yes, no need install nvm"; \
-fi
+    curl -o install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh && chmod +x install.sh && ./install.sh && /bin/bash -c "source $HOME/.nvm/nvm.sh && nvm install 14 && nvm use 14" ;\
+    else \
+    echo "$BUILD_RAYSERVER_DASHBOARD not yes, no need install nvm"; \
+    fi
 
 WORKDIR /historyserver
 COPY . .
 
 RUN if [ "$BUILD_RAYSERVER_DASHBOARD" = "yes" ] ; then \
- /bin/bash -c "source $HOME/.nvm/nvm.sh && cd dashboard/v2.51.0/client && npm ci && npm run build" ;\
-else \
- mkdir -p dashboard/v2.51.0/client/build ;\
- echo "do not npm run build"; \
-fi
+    /bin/bash -c "source $HOME/.nvm/nvm.sh && cd dashboard/v2.51.0/client && npm ci && npm run build" ;\
+    else \
+    mkdir -p dashboard/v2.51.0/client/build ;\
+    echo "do not npm run build"; \
+    fi
 
 RUN make build GOOS=${TARGETOS} GOARCH=${TARGETARCH}
 
