@@ -38,7 +38,7 @@ func NewCollector(config *types.RayCollectorConfig, writer storage.StorageWriter
 		Writer:       writer,
 		ShutdownChan: make(chan struct{}),
 	}
-	logDir := strings.TrimSpace(path.Join(config.SessionDir, utils.RAY_SESSIONDIR_LOGDIR_NAME))
+	logDir := strings.TrimSpace(path.Join(config.SessionDir, utils.RaySessionDirLogDirName))
 	handler.LogDir = logDir
 	rootMetaDir := fmt.Sprintf("%s/", path.Clean(path.Join(handler.RootDir, handler.RayClusterName+"_"+handler.RayClusterID, "meta")))
 	handler.MetaDir = rootMetaDir

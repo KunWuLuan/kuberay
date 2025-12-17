@@ -269,7 +269,7 @@ func New(c *config) (*RayLogsHandler, error) {
 	sessionDir := strings.TrimSpace(c.SessionDir)
 	sessionDir = filepath.Clean(sessionDir)
 
-	logdir := strings.TrimSpace(path.Join(sessionDir, utils.RAY_SESSIONDIR_LOGDIR_NAME))
+	logdir := strings.TrimSpace(path.Join(sessionDir, utils.RaySessionDirLogDirName))
 	logdir = filepath.Clean(logdir)
 	logrus.Infof("Clean logdir is %s", logdir)
 

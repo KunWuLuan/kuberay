@@ -28,35 +28,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	RAY_SESSIONDIR_LOGDIR_NAME  = "logs"
-	RAY_SESSIONDIR_METADIR_NAME = "meta"
-)
-
-const (
-	OssMetaFile_BasicInfo = "ack__basicinfo"
-
-	OssMetaFile_NodeSummaryKey                        = "restful__nodes_view_summary"
-	OssMetaFile_Node_Prefix                           = "restful__nodes_"
-	OssMetaFile_JOBTASK_DETAIL_Prefix                 = "restful__api__v0__tasks_detail_job_id_"
-	OssMetaFile_JOBTASK_SUMMARIZE_BY_FUNC_NAME_Prefix = "restful__api__v0__tasks_summarize_by_func_name_job_id_"
-	OssMetaFile_JOBTASK_SUMMARIZE_BY_LINEAGE_Prefix   = "restful__api__v0__tasks_summarize_by_lineage_job_id_"
-	OssMetaFile_JOBDATASETS_Prefix                    = "restful__api__data__datasets_job_id_"
-	OssMetaFile_NodeLogs_Prefix                       = "restful__api__v0__logs_node_id_"
-	OssMetaFile_ClusterStatus                         = "restful__api__cluster_status"
-	OssMetaFile_LOGICAL_ACTORS                        = "restful__logical__actors"
-	OssMetaFile_ALLTASKS_DETAIL                       = "restful__api__v0__tasks_detail"
-	OssMetaFile_Events                                = "restful__events"
-	OssMetaFile_PlacementGroups                       = "restful__api__v0__placement_groups_detail"
-
-	OssMetaFile_ClusterSessionName = "static__api__cluster_session_name"
-
-	OssMetaFile_Jobs         = "restful__api__jobs"
-	OssMetaFile_Applications = "restful__api__serve__applications"
-)
-
-const RAY_HISTORY_SERVER_LOGNAME = "historyserver-ray.log"
-
 func RecreateObjectDir(bucket *oss.Bucket, dir string, options ...oss.Option) error {
 	objectDir := fmt.Sprintf("%s/", path.Clean(dir))
 
@@ -182,29 +153,20 @@ func DeleteObject(bucket *oss.Bucket, objectName string) error {
 }
 
 func GetMetaDirByNameID(ossHistorySeverDir, rayClusterNameID string) string {
-	return fmt.Sprintf("%s/", path.Clean(path.Join(ossHistorySeverDir, rayClusterNameID, RAY_SESSIONDIR_METADIR_NAME)))
+	return fmt.Sprintf("%s/", path.Clean(path.Join(ossHistorySeverDir, rayClusterNameID, RaySessionDirMetaDirName)))
 }
 
 func GetLogDirByNameID(ossHistorySeverDir, rayClusterNameID, rayNodeID, sessionId string) string {
-	return fmt.Sprintf("%s/", path.Clean(path.Join(ossHistorySeverDir, rayClusterNameID, sessionId, RAY_SESSIONDIR_LOGDIR_NAME, rayNodeID)))
+	return fmt.Sprintf("%s/", path.Clean(path.Join(ossHistorySeverDir, rayClusterNameID, sessionId, RaySessionDirLogDirName, rayNodeID)))
 }
 
 func GetLogDir(ossHistorySeverDir, rayClusterName, rayClusterID, sessionId, rayNodeID string) string {
-	return fmt.Sprintf("%s/", path.Clean(path.Join(ossHistorySeverDir, AppendRayClusterNameID(rayClusterName, rayClusterID), sessionId, RAY_SESSIONDIR_LOGDIR_NAME, rayNodeID)))
+	return fmt.Sprintf("%s/", path.Clean(path.Join(ossHistorySeverDir, AppendRayClusterNameID(rayClusterName, rayClusterID), sessionId, RaySessionDirLogDirName, rayNodeID)))
 }
 
 const (
 	// do not change
 	connector = "_"
-)
-
-const (
-	// defaultMaxRetryAttempts controls how many times we retry reading
-	// local Ray metadata files (e.g. session dir, node id) before failing.
-	defaultMaxRetryAttempts = 3
-	// defaultInitialRetryDelay is the base delay before the first retry.
-	// Subsequent retries use an exponential backoff based on this value.
-	defaultInitialRetryDelay = 5 * time.Second
 )
 
 func AppendRayClusterNameID(rayClusterName, rayClusterID string) string {
@@ -220,14 +182,13 @@ func GetRarClusterNameAndID(rayClusterNameID string) (string, string) {
 }
 
 func GetSessionDir() (string, error) {
-	session_latest_path := "/tmp/ray/session_latest"
-	for i := 0; i < defaultMaxRetryAttempts; i++ {
-		rp, err := os.Readlink(session_latest_path)
+	for i := 0; i < DefaultMaxRetryAttempts; i++ {
+		rp, err := os.Readlink(RaySessionLatestPath)
 		if err != nil {
 			logrus.Errorf("read session_latest file error %v", err)
-			if i < defaultMaxRetryAttempts-1 {
+			if i < DefaultMaxRetryAttempts-1 {
 				// Apply exponential backoff between retries. We use bit shift to compute 2 to the power of i.
-				backoff := time.Duration(1<<i) * defaultInitialRetryDelay
+				backoff := time.Duration(1<<i) * DefaultInitialRetryDelay
 				time.Sleep(backoff)
 				continue
 			}
@@ -239,13 +200,13 @@ func GetSessionDir() (string, error) {
 }
 
 func GetRayNodeID() (string, error) {
-	for i := 0; i < defaultMaxRetryAttempts; i++ {
-		nodeidBytes, err := os.ReadFile("/tmp/ray/raylet_node_id")
+	for i := 0; i < DefaultMaxRetryAttempts; i++ {
+		nodeidBytes, err := os.ReadFile(RayNodeIDPath)
 		if err != nil {
 			logrus.Errorf("read nodeid file error %v", err)
-			if i < defaultMaxRetryAttempts-1 {
+			if i < DefaultMaxRetryAttempts-1 {
 				// Apply exponential backoff between retries. We use bit shift to compute 2 to the power of i.
-				backoff := time.Duration(1<<i) * defaultInitialRetryDelay
+				backoff := time.Duration(1<<i) * DefaultInitialRetryDelay
 				time.Sleep(backoff)
 				continue
 			}
