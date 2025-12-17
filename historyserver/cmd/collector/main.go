@@ -42,12 +42,14 @@ func main() {
 
 	sessionDir, err := utils.GetSessionDir()
 	if err != nil {
-		panic("Failed to get session dir: " + err.Error())
+		logrus.Errorf("Failed to get session dir: %v", err)
+		os.Exit(1)
 	}
 
 	rayNodeId, err := utils.GetRayNodeID()
 	if err != nil {
-		panic("Failed to get ray node id: " + err.Error())
+		logrus.Errorf("Failed to get ray node id: %v", err)
+		os.Exit(1)
 	}
 
 	sessionName := path.Base(sessionDir)
@@ -56,18 +58,21 @@ func main() {
 	if runtimeClassConfigPath != "" {
 		data, err := os.ReadFile(runtimeClassConfigPath)
 		if err != nil {
-			panic("Failed to read runtime class config " + err.Error())
+			logrus.Errorf("Failed to read runtime class config: %v", err)
+			os.Exit(1)
 		}
 		err = json.Unmarshal(data, &jsonData)
 		if err != nil {
-			panic("Failed to parse runtime class config: " + err.Error())
+			logrus.Errorf("Failed to parse runtime class config: %v", err)
+			os.Exit(1)
 		}
 	}
 
 	registry := collector.GetWriterRegistry()
 	factory, ok := registry[runtimeClassName]
 	if !ok {
-		panic("Not supported runtime class name: " + runtimeClassName + " for role: " + role + ".")
+		logrus.Errorf("Not supported runtime class name: %s for role: %s", runtimeClassName, role)
+		os.Exit(1)
 	}
 
 	globalConfig := types.RayCollectorConfig{
@@ -84,7 +89,8 @@ func main() {
 
 	writer, err := factory(&globalConfig, jsonData)
 	if err != nil {
-		panic("Failed to create writer for runtime class name: " + runtimeClassName + " for role: " + role + ".")
+		logrus.Errorf("Failed to create writer for runtime class name: %s for role: %s: %v", runtimeClassName, role, err)
+		os.Exit(1)
 	}
 
 	// Create and initialize EventServer
