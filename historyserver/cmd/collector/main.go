@@ -19,23 +19,23 @@ import (
 
 func main() {
 	var role string
-	var runtimeClassName string
+	var storageProvider string
 	var rayClusterName string
 	var rayClusterId string
 	var rayRootDir string
 	var logBatching int
 	var eventsPort int
 	var pushInterval time.Duration
-	var runtimeClassConfigPath string
+	var storageProviderConfigPath string
 
 	flag.StringVar(&role, "role", "Worker", "")
-	flag.StringVar(&runtimeClassName, "runtime-class-name", "", "")
+	flag.StringVar(&storageProvider, "storage-provider", "", "")
 	flag.StringVar(&rayClusterName, "ray-cluster-name", "", "")
 	flag.StringVar(&rayClusterId, "ray-cluster-id", "default", "")
 	flag.StringVar(&rayRootDir, "ray-root-dir", "", "")
 	flag.IntVar(&logBatching, "log-batching", 1000, "")
 	flag.IntVar(&eventsPort, "events-port", 8080, "")
-	flag.StringVar(&runtimeClassConfigPath, "runtime-class-config-path", "", "") //"/var/collector-config/data"
+	flag.StringVar(&storageProviderConfigPath, "storage-provider-config-path", "", "") //"/var/collector-config/data"
 	flag.DurationVar(&pushInterval, "push-interval", time.Minute, "")
 
 	flag.Parse()
@@ -55,23 +55,23 @@ func main() {
 	sessionName := path.Base(sessionDir)
 
 	jsonData := make(map[string]interface{})
-	if runtimeClassConfigPath != "" {
-		data, err := os.ReadFile(runtimeClassConfigPath)
+	if storageProviderConfigPath != "" {
+		data, err := os.ReadFile(storageProviderConfigPath)
 		if err != nil {
-			logrus.Errorf("Failed to read runtime class config: %v", err)
+			logrus.Errorf("Failed to read storage provider config: %v", err)
 			os.Exit(1)
 		}
 		err = json.Unmarshal(data, &jsonData)
 		if err != nil {
-			logrus.Errorf("Failed to parse runtime class config: %v", err)
+			logrus.Errorf("Failed to parse storage provider config: %v", err)
 			os.Exit(1)
 		}
 	}
 
 	registry := collector.GetWriterRegistry()
-	factory, ok := registry[runtimeClassName]
+	factory, ok := registry[storageProvider]
 	if !ok {
-		logrus.Errorf("Not supported runtime class name: %s for role: %s", runtimeClassName, role)
+		logrus.Errorf("Not supported storage provider: %s for role: %s", storageProvider, role)
 		os.Exit(1)
 	}
 
@@ -89,7 +89,7 @@ func main() {
 
 	writer, err := factory(&globalConfig, jsonData)
 	if err != nil {
-		logrus.Errorf("Failed to create writer for runtime class name: %s for role: %s: %v", runtimeClassName, role, err)
+		logrus.Errorf("Failed to create writer for storage provider: %s for role: %s: %v", storageProvider, role, err)
 		os.Exit(1)
 	}
 
