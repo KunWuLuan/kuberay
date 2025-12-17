@@ -257,6 +257,8 @@ func (es *EventServer) PersistEvents(req *restful.Request, resp *restful.Respons
 
 			// Flush previous events
 			es.flushEventsInternal(eventsToFlush)
+
+			resp.WriteHeader(http.StatusOK)
 			return
 		}
 		es.mutex.Unlock()
