@@ -19,6 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/ray-project/kuberay/historyserver/pkg/collector/logcollector/storage"
+	"github.com/ray-project/kuberay/historyserver/pkg/utils"
 )
 
 type Event struct {
@@ -100,7 +101,7 @@ func (es *EventServer) InitServer(port int) {
 
 // watchNodeIDFile watches /tmp/ray/raylet_node_id for content changes
 func (es *EventServer) watchNodeIDFile() {
-	nodeIDFilePath := "/tmp/ray/raylet_node_id"
+	nodeIDFilePath := utils.RayNodeIDPath
 
 	// Create new watcher
 	watcher, err := fsnotify.NewWatcher()
