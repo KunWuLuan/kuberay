@@ -53,7 +53,7 @@ mod:
 
 .PHONY: localimage
 localimage: dockerbuilder_instance
-	docker buildx build -t historyserver:laster --platform linux/amd64 . --load
+	docker buildx build -t historyserver:latest --platform linux/amd64 . --load
 
 .PHONY: dockerbuilder_instance
 dockerbuilder_instance:
