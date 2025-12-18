@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
-	"path"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/ray-project/kuberay/historyserver/pkg/collector"
-	"github.com/ray-project/kuberay/historyserver/pkg/collector/eventserver"
 	"github.com/ray-project/kuberay/historyserver/pkg/collector/logcollector/runtime"
 	"github.com/ray-project/kuberay/historyserver/pkg/collector/types"
 	"github.com/ray-project/kuberay/historyserver/pkg/utils"
@@ -24,7 +22,6 @@ func main() {
 	var rayClusterId string
 	var rayRootDir string
 	var logBatching int
-	var eventsPort int
 	var pushInterval time.Duration
 	var storageProviderConfigPath string
 
@@ -34,7 +31,6 @@ func main() {
 	flag.StringVar(&rayClusterId, "ray-cluster-id", "default", "")
 	flag.StringVar(&rayRootDir, "ray-root-dir", "", "")
 	flag.IntVar(&logBatching, "log-batching", 1000, "")
-	flag.IntVar(&eventsPort, "events-port", 8080, "")
 	flag.StringVar(&storageProviderConfigPath, "storage-provider-config-path", "", "") //"/var/collector-config/data"
 	flag.DurationVar(&pushInterval, "push-interval", time.Minute, "")
 
@@ -51,8 +47,6 @@ func main() {
 		logrus.Errorf("Failed to get ray node id: %v", err)
 		os.Exit(1)
 	}
-
-	sessionName := path.Base(sessionDir)
 
 	jsonData := make(map[string]interface{})
 	if storageProviderConfigPath != "" {
@@ -93,18 +87,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create and initialize EventServer
-	eventServer := eventserver.NewEventServer(writer, rayRootDir, sessionDir, rayNodeId, rayClusterName, rayClusterId, sessionName)
-	eventServer.InitServer(eventsPort)
-
+	// Create and initialize LogCollector
 	logCollector := runtime.NewCollector(&globalConfig, writer)
 	_ = logCollector.Start(context.TODO().Done())
 
-	eventStop := eventServer.WaitForStop()
 	logStop := logCollector.WaitForStop()
-	<-eventStop
-	logrus.Info("Event server shutdown")
 	<-logStop
 	logrus.Info("Log server shutdown")
-	logrus.Info("All servers shutdown")
 }
