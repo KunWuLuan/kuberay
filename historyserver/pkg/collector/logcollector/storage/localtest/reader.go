@@ -15,34 +15,8 @@ type MockReader struct {
 	clusters []utils.ClusterInfo
 }
 
-// NewMockReader creates a new mock reader
-func NewMockReader() *MockReader {
-	clusters := []utils.ClusterInfo{
-		{
-			Name:            "cluster-1",
-			SessionName:     "session-1",
-			CreateTime:      "2023-01-01T00:00:00Z",
-			CreateTimeStamp: 1672531200000,
-		},
-		{
-			Name:            "cluster-2",
-			SessionName:     "session-2",
-			CreateTime:      "2023-01-02T00:00:00Z",
-			CreateTimeStamp: 1672617600000,
-		},
-	}
-
-	data := map[string]map[string]string{
-		"cluster-1": {
-			"log.txt":       "This is log content for cluster-1\nMultiple lines\nof log content",
-			"metadata.json": "{\n  \"name\": \"cluster-1\",\n  \"sessionName\": \"session-1\",\n  \"createTime\": \"2023-01-01T00:00:00Z\"\n}",
-		},
-		"cluster-2": {
-			"log.txt":       "This is log content for cluster-2\nMultiple lines\nof log content",
-			"metadata.json": "{\n  \"name\": \"cluster-2\",\n  \"sessionName\": \"session-2\",\n  \"createTime\": \"2023-01-02T00:00:00Z\"\n}",
-		},
-	}
-
+// NewMockReader creates a new mock reader with the provided clusters and data.
+func NewMockReader(clusters []utils.ClusterInfo, data map[string]map[string]string) *MockReader {
 	return &MockReader{
 		clusters: clusters,
 		data:     data,
@@ -75,7 +49,33 @@ func (r *MockReader) ListFiles(clusterId string, dir string) []string {
 	return []string{}
 }
 
-// NewReader creates a new StorageReader
+// NewReader creates a new StorageReader with some default mock data.
 func NewReader(c *types.RayHistoryServerConfig, jd map[string]interface{}) (storage.StorageReader, error) {
-	return NewMockReader(), nil
+	clusters := []utils.ClusterInfo{
+		{
+			Name:            "cluster-1",
+			SessionName:     "session-1",
+			CreateTime:      "2023-01-01T00:00:00Z",
+			CreateTimeStamp: 1672531200000,
+		},
+		{
+			Name:            "cluster-2",
+			SessionName:     "session-2",
+			CreateTime:      "2023-01-02T00:00:00Z",
+			CreateTimeStamp: 1672617600000,
+		},
+	}
+
+	data := map[string]map[string]string{
+		"cluster-1": {
+			"log.txt":       "This is log content for cluster-1\nMultiple lines\nof log content",
+			"metadata.json": "{\n  \"name\": \"cluster-1\",\n  \"sessionName\": \"session-1\",\n  \"createTime\": \"2023-01-01T00:00:00Z\"\n}",
+		},
+		"cluster-2": {
+			"log.txt":       "This is log content for cluster-2\nMultiple lines\nof log content",
+			"metadata.json": "{\n  \"name\": \"cluster-2\",\n  \"sessionName\": \"session-2\",\n  \"createTime\": \"2023-01-02T00:00:00Z\"\n}",
+		},
+	}
+
+	return NewMockReader(clusters, data), nil
 }
