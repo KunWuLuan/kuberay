@@ -679,9 +679,11 @@ func (r *RayLogHandler) processPrevLogsDir(sessionNodeDir string) {
 	}
 
 	// Walk through the logs directory and process all files
+	var processingErrors []error
 	err := filepath.WalkDir(logsDir, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
 			logrus.Errorf("Error walking logs path %s: %v", path, err)
+			processingErrors = append(processingErrors, fmt.Errorf("error walking logs path %s: %w", path, err))
 			return nil
 		}
 
@@ -693,12 +695,20 @@ func (r *RayLogHandler) processPrevLogsDir(sessionNodeDir string) {
 		// Process log file
 		if err := r.processPrevLogFile(path, logsDir, sessionID, nodeID); err != nil {
 			logrus.Errorf("Failed to process prev-log file %s: %v", path, err)
+			processingErrors = append(processingErrors, fmt.Errorf("failed to process prev-log file %s: %w", path, err))
 		}
 
 		return nil
 	})
 	if err != nil {
 		logrus.Errorf("Error walking logs directory %s: %v", logsDir, err)
+		return
+	}
+
+	// Process failed log files in the next retry
+	if len(processingErrors) > 0 {
+		logrus.Warnf("Failed to process %d log files for session: %s, node: %s. Keeping directory for retry. Errors: %v",
+			len(processingErrors), sessionID, nodeID, processingErrors)
 		return
 	}
 
