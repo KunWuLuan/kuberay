@@ -37,6 +37,10 @@ Please ensure your environment matches the version requirements specified in the
 The following environment setup is based on the [ray-operator development guide](https://github.com/JiangJiaWei1103/kuberay/blob/e4d8ad6e34adbe13b4c77c35313af2c9bc16da82/ray-operator/DEVELOPMENT.md#run-the-operator-inside-the-cluster).
 
 ```bash
+# Clone the KubeRay repo and cd into the working dir.
+git clone https://github.com/ray-project/kuberay.git
+cd kuberay/ray-operator
+
 # Spin up a kind cluster.
 kind create cluster --image=kindest/node:v1.26.0 --name kuberay
 
@@ -64,11 +68,11 @@ We've made several changes to KunWu's original PR to make it more focused on the
 the following commands to clone the correct repo and checkout the latest PR:
 
 ```bash
-# Clone KunWu's KubeRay repo.
-git clone https://github.com/KunWuLuan/kuberay.git
+# Clone KunWu's KubeRay repo. Also, rename the repo to avoid conflicts with the original KubeRay dir.
+git clone https://github.com/KunWuLuan/kuberay.git kuberay_historyserver
 
 # CD into the history server dir.
-cd kuberay/historyserver
+cd kuberay_historyserver/historyserver
 
 # Checkout the latest PR.
 gh pr checkout 2
@@ -119,7 +123,8 @@ Username: minioadmin
 Password: minioadmin
 ```
 
-Before deploying the Ray cluster, you also need to create a new bucket `ray-historyserver-log` in the minio UI for
+> [!IMPORTANT]
+> Before deploying the Ray cluster, you also need to create a new bucket `ray-historyserver-log` in the minio UI for
 uploaded logs:
 
 ![create_bucket](https://github.com/KunWuLuan/kuberay/blob/0a70a0e354db13d005e90de9817e8a87308e4810/historyserver/assets/create_bucket.png)
