@@ -122,7 +122,7 @@ Password: minioadmin
 Before deploying the Ray cluster, you also need to create a new bucket `ray-historyserver-log` in the minio UI for
 uploaded logs:
 
-<png1>
+![create_bucket](https://github.com/KunWuLuan/kuberay/blob/0a70a0e354db13d005e90de9817e8a87308e4810/historyserver/assets/create_bucket.png)
 
 ### Deploy a Ray Cluster for Checks
 
@@ -144,4 +144,4 @@ kubectl delete -f config/raycluster.yaml
 
 You're supposed to see the uploaded logs in the minio UI as below:
 
-<png2>
+![write_logs](https://github.com/KunWuLuan/kuberay/blob/0a70a0e354db13d005e90de9817e8a87308e4810/historyserver/assets/write_logs.png)
