@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -60,21 +61,35 @@ func (r *RayLogsHandler) CreateDirectory(d string) error {
 		Bucket: aws.String(r.S3Bucket),
 		Key:    aws.String(objectDir),
 	})
-	if err != nil {
-		// Directory doesn't exist, create it
-		logrus.Infof("Begin to create s3 dir %s ...", objectDir)
-		_, err = r.S3Client.PutObject(&s3.PutObjectInput{
-			Bucket: aws.String(r.S3Bucket),
-			Key:    aws.String(objectDir),
-			Body:   bytes.NewReader([]byte("")),
-		})
-		if err != nil {
-			logrus.Errorf("Failed to create directory '%s': %v", objectDir, err)
-			return err
-		}
-		logrus.Infof("Create s3 dir %s success", objectDir)
+
+	// Directory placeholder already exists
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	if aerr, ok := err.(awserr.Error); ok {
+		switch aerr.Code() {
+		case s3.ErrCodeNoSuchKey, "NotFound":
+			logrus.Infof("S3 object %s doesn't exist, creating it...", objectDir)
+
+			_, err = r.S3Client.PutObject(&s3.PutObjectInput{
+				Bucket: aws.String(r.S3Bucket),
+				Key:    aws.String(objectDir),
+				Body:   bytes.NewReader([]byte("")),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create s3 object %s: %w", objectDir, err)
+			}
+			logrus.Infof("Created s3 object %s", objectDir)
+			return nil
+		default:
+			return fmt.Errorf("failed to retrieve metadata from s3 object %s: %w", objectDir, err)
+		}
+	}
+
+	// If err is not an AWS-specific error (e.g., network error, context cancelled),
+	// we can't determine if the object exists, so return the error immediately.
+	return fmt.Errorf("failed to check if s3 object %s exists: %w", objectDir, err)
 }
 
 func (r *RayLogsHandler) WriteFile(file string, reader io.ReadSeeker) error {
@@ -179,13 +194,13 @@ func (r *RayLogsHandler) List() (res []utils.ClusterInfo) {
 					sessionInfo := strings.Split(metas[1], "_")
 					date := sessionInfo[1]
 					dataTime := sessionInfo[2]
-					createTime, err := time.Parse("2006-01-02_15-04-05", date+"_"+dataTime)
+					creationTime, err := time.Parse("2006-01-02_15-04-05", date+"_"+dataTime)
 					if err != nil {
 						logrus.Errorf("Failed to parse time %s: %v", date+"_"+dataTime, err)
 						continue
 					}
-					c.CreateTimeStamp = createTime.Unix()
-					c.CreateTime = createTime.UTC().Format(("2006-01-02T15:04:05Z"))
+					c.CreationTimestamp = creationTime.Unix()
+					c.CreationTime = creationTime.UTC().Format(("2006-01-02T15:04:05Z"))
 					clusters = append(clusters, *c)
 				}
 				return true
@@ -250,7 +265,7 @@ func NewReader(c *types.RayHistoryServerConfig, jd map[string]interface{}) (stor
 	return New(config)
 }
 
-func NewWritter(c *types.RayCollectorConfig, jd map[string]interface{}) (storage.StorageWriter, error) {
+func NewWriter(c *types.RayCollectorConfig, jd map[string]interface{}) (storage.StorageWriter, error) {
 	config := &config{}
 	config.complete(c, jd)
 
@@ -282,7 +297,7 @@ func New(c *config) (*RayLogsHandler, error) {
 	sessionDir := strings.TrimSpace(c.SessionDir)
 	sessionDir = filepath.Clean(sessionDir)
 
-	logdir := strings.TrimSpace(path.Join(sessionDir, utils.RAY_SESSIONDIR_LOGDIR_NAME))
+	logdir := strings.TrimSpace(path.Join(sessionDir, utils.RaySessionDirLogDirName))
 	logdir = filepath.Clean(logdir)
 	logrus.Infof("Clean logdir is %s", logdir)
 

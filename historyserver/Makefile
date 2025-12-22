@@ -6,7 +6,6 @@ GOBIN_GOLANGCILINT := $(GOBIN)/golangci-lint
 DOCKERBUILDER_INSTANCE=historyserver
 OUT_DIR=output
 BIN_DIR=$(OUT_DIR)/bin
-BINARY_NAME=historyserver
 BINARY_NAME_COLLECTOR=collector
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
@@ -39,7 +38,7 @@ clean:
 	rm -rf $(OUT_DIR)
 
 .PHONY: build
-build: buildcollector buildhistoryserver
+build: buildcollector
 
 .PHONY: buildcollector
 #build: mod alllint test
@@ -48,26 +47,13 @@ buildcollector: mod
 	@echo "go build ..."
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME_COLLECTOR) ./cmd/collector/main.go
 
-.PHONY: buildhistoryserver
-#build: mod alllint test
-buildhistoryserver: mod
-	@echo ""
-	@echo "go build ..."
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/historyserver/main.go
-
-.PHONY: simplebuild
-simplebuild:
-	@echo ""
-	@echo "go build ..."
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v $(GO_BUILD_FLAGS)  -o $(BIN_DIR)/$(BINARY_NAME)
-
 .PHONY: mod
 mod:
 	go mod tidy
 
 .PHONY: localimage
 localimage: dockerbuilder_instance
-	docker buildx build -t historyserver:laster --platform linux/amd64 . --load
+	docker buildx build -t historyserver:latest --platform linux/amd64 . --load
 
 .PHONY: dockerbuilder_instance
 dockerbuilder_instance:
