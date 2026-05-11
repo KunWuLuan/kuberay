@@ -22,15 +22,24 @@ func main() {
 	runtimeClassConfigPath := "/var/collector-config/data"
 	dashboardDir := ""
 	useKubernetesProxy := false
+	qps := float64(0)
+	burst := 0
 	flag.StringVar(&runtimeClassName, "runtime-class-name", "", "")
 	flag.StringVar(&rayRootDir, "ray-root-dir", "", "")
 	flag.StringVar(&kubeconfigs, "kubeconfigs", "", "")
 	flag.StringVar(&dashboardDir, "dashboard-dir", "/dashboard", "")
 	flag.StringVar(&runtimeClassConfigPath, "runtime-class-config-path", "", "") //"/var/collector-config/data"
 	flag.BoolVar(&useKubernetesProxy, "use-kubernetes-proxy", false, "")
+	flag.Float64Var(&qps, "kube-api-qps", 0, "QPS to use for Kubernetes API client (default 50)")
+	flag.IntVar(&burst, "kube-api-burst", 0, "Burst to use for Kubernetes API client (default 100)")
 	flag.Parse()
 
-	cliMgr, err := historyserver.NewClientManager(kubeconfigs, useKubernetesProxy)
+	cliMgr, err := historyserver.NewClientManager(historyserver.ClientManagerConfig{
+		Kubeconfigs:        kubeconfigs,
+		UseKubernetesProxy: useKubernetesProxy,
+		QPS:                float32(qps),
+		Burst:              burst,
+	})
 	if err != nil {
 		logrus.Errorf("Failed to create client manager: %v", err)
 		os.Exit(1)
