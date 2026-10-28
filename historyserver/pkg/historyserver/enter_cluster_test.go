@@ -2,6 +2,7 @@ package historyserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -252,6 +253,65 @@ func TestEnterCluster(t *testing.T) {
 			t.Errorf("Expected the bootstrap page to forward the URL fragment, got %q", body)
 		}
 	})
+
+	for _, tc := range []struct {
+		name, path, accept string
+		status             int
+		json               bool
+	}{
+		{"trailing slash", "/enter_cluster/default/raycluster/cluster-a/", "text/html", http.StatusOK, false},
+		{"JSON client", "/enter_cluster/default/raycluster/cluster-a", "application/json", http.StatusOK, true},
+		{"invalid kind", "/enter_cluster/default/invalid/cluster-a", "text/html", http.StatusBadRequest, false},
+		{"missing cluster", "/enter_cluster/default/raycluster/missing", "text/html", http.StatusNotFound, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), "GET", tc.path, nil)
+			req.Header.Set("Accept", tc.accept)
+			resp := httptest.NewRecorder()
+			container.ServeHTTP(resp, req)
+			if resp.Code != tc.status {
+				t.Fatalf("Expected status %d, got %d: %s", tc.status, resp.Code, resp.Body.String())
+			}
+			for name, want := range map[string]string{"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Cache-Control": "no-store"} {
+				if got := resp.Header().Get(name); got != want {
+					t.Errorf("%s = %q, want %q", name, got, want)
+				}
+			}
+			if tc.status != http.StatusOK {
+				if got := resp.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+					t.Errorf("Unexpected error Content-Type: %q", got)
+				}
+				if len(resp.Result().Cookies()) != 0 {
+					t.Error("Error response must not set context cookies")
+				}
+				return
+			}
+			if len(resp.Result().Cookies()) != 5 {
+				t.Errorf("Expected five context cookies, got %v", resp.Result().Cookies())
+			}
+			if tc.json {
+				if got := resp.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+					t.Errorf("Unexpected JSON Content-Type: %q", got)
+				}
+				var body map[string]string
+				if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				for key, want := range map[string]string{"result": "success", "name": "cluster-a", "namespace": "default", "session": "session_2026-04-22_10-00-00_000000_1"} {
+					if body[key] != want {
+						t.Errorf("%s = %q, want %q", key, body[key], want)
+					}
+				}
+			} else {
+				if got := resp.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
+					t.Errorf("Unexpected HTML Content-Type: %q", got)
+				}
+				if !strings.Contains(resp.Body.String(), `location.replace("/" + location.hash)`) {
+					t.Error("Missing client-side navigation")
+				}
+			}
+		})
+	}
 
 	t.Run("Browser-style navigation headers are not rejected", func(t *testing.T) {
 		req := httptest.NewRequestWithContext(t.Context(), "GET", "/enter_cluster/default/raycluster/cluster-a", nil)
