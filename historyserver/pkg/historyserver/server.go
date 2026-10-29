@@ -29,7 +29,7 @@ type ServerHandler struct {
 	enableLiveClusters bool
 
 	// User authentication (user -> history server). nil when --enable-auth is
-	// off, which keeps the pre-auth behaviour intact.
+	// off, which keeps the pre-auth behavior intact.
 	authenticator    *Authenticator
 	authCookieSecure bool
 	authCookieMaxAge time.Duration

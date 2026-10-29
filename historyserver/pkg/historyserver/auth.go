@@ -255,6 +255,7 @@ func routerAuth(s *ServerHandler) {
 		case http.MethodGet:
 			writeLoginPage(w, http.StatusOK, safeNext(r.URL.Query().Get("next")), "")
 		case http.MethodPost:
+			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 			if err := r.ParseForm(); err != nil {
 				writeLoginError(w, r, http.StatusBadRequest, safeNext(r.URL.Query().Get("next")), "cannot parse login form")
 				return

@@ -31,12 +31,12 @@ func newTestAuthenticator(t *testing.T, reaction k8stesting.ReactionFunc) *Authe
 	}
 }
 
-func authenticatedReaction(user string) k8stesting.ReactionFunc {
+func authenticatedReaction() k8stesting.ReactionFunc {
 	return func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &authv1.TokenReview{
 			Status: authv1.TokenReviewStatus{
 				Authenticated: true,
-				User:          authv1.UserInfo{Username: user},
+				User:          authv1.UserInfo{Username: "alice"},
 			},
 		}, nil
 	}
@@ -77,10 +77,10 @@ func TestAuthenticateCachesSuccessfulReview(t *testing.T) {
 	calls := 0
 	a := newTestAuthenticator(t, func(action k8stesting.Action) (bool, runtime.Object, error) {
 		calls++
-		return authenticatedReaction("alice")(action)
+		return authenticatedReaction()(action)
 	})
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		user, err := a.Authenticate(context.Background(), "good-token")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -97,7 +97,7 @@ func TestAuthenticateCachesSuccessfulReview(t *testing.T) {
 func TestExtractTokenPrefersHeaderAndFailsHardOnBadScheme(t *testing.T) {
 	cookie := &http.Cookie{Name: AuthCookieName, Value: "cookie-token"}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/jobs/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/", nil)
 	req.Header.Set("Authorization", "Bearer header-token")
 	req.AddCookie(cookie)
 	got, err := extractToken(req)
@@ -107,14 +107,14 @@ func TestExtractTokenPrefersHeaderAndFailsHardOnBadScheme(t *testing.T) {
 
 	// A malformed header must not silently fall back to the cookie: that would
 	// authenticate a misconfigured client as the browser's user.
-	req = httptest.NewRequest(http.MethodGet, "/api/jobs/", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/", nil)
 	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
 	req.AddCookie(cookie)
 	if _, err = extractToken(req); err == nil {
 		t.Fatal("a non-Bearer Authorization header must be a hard failure")
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/jobs/", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/", nil)
 	req.AddCookie(cookie)
 	got, err = extractToken(req)
 	if err != nil || got != "cookie-token" {
@@ -178,11 +178,11 @@ func TestSafeNextDefaultIsServed(t *testing.T) {
 }
 
 func TestAuthFilterRedirectsBrowserButReturnsJSONToXHR(t *testing.T) {
-	s := &ServerHandler{authenticator: newTestAuthenticator(t, authenticatedReaction("alice"))}
+	s := &ServerHandler{authenticator: newTestAuthenticator(t, authenticatedReaction())}
 
 	// Browser navigation without a credential: keep the single-link flow working.
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/enter_cluster/ns/raycluster/c/s", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/enter_cluster/ns/raycluster/c/s", nil)
 	req.Header.Set("Accept", "text/html")
 	s.AuthFilter(restfulRequest(req), restfulResponse(rec), emptyChain())
 	if rec.Code != http.StatusFound {
@@ -194,7 +194,7 @@ func TestAuthFilterRedirectsBrowserButReturnsJSONToXHR(t *testing.T) {
 
 	// XHR without a credential: machine-readable 401, no HTML.
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/jobs/", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/", nil)
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	s.AuthFilter(restfulRequest(req), restfulResponse(rec), emptyChain())
 	if rec.Code != http.StatusUnauthorized {
@@ -204,9 +204,9 @@ func TestAuthFilterRedirectsBrowserButReturnsJSONToXHR(t *testing.T) {
 
 func TestSelectClusterAuthentication(t *testing.T) {
 	t.Run("unauthenticated request redirects to login", func(t *testing.T) {
-		s := &ServerHandler{authenticator: newTestAuthenticator(t, authenticatedReaction("alice"))}
+		s := &ServerHandler{authenticator: newTestAuthenticator(t, authenticatedReaction())}
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/select_cluster?from=test", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/select_cluster?from=test", nil)
 		selectClusterHandler(s).ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusFound {
@@ -218,9 +218,9 @@ func TestSelectClusterAuthentication(t *testing.T) {
 	})
 
 	t.Run("authenticated request renders selector", func(t *testing.T) {
-		s := &ServerHandler{authenticator: newTestAuthenticator(t, authenticatedReaction("alice"))}
+		s := &ServerHandler{authenticator: newTestAuthenticator(t, authenticatedReaction())}
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/select_cluster", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/select_cluster", nil)
 		req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: "good-token"})
 		selectClusterHandler(s).ServeHTTP(rec, req)
 
@@ -234,7 +234,7 @@ func TestSelectClusterAuthentication(t *testing.T) {
 			return true, nil, errors.New("apiserver unavailable")
 		})}
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/select_cluster", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/select_cluster", nil)
 		req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: "token"})
 		selectClusterHandler(s).ServeHTTP(rec, req)
 
@@ -245,7 +245,7 @@ func TestSelectClusterAuthentication(t *testing.T) {
 
 	t.Run("auth disabled renders selector", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		selectClusterHandler(&ServerHandler{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/select_cluster", nil))
+		selectClusterHandler(&ServerHandler{}).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/select_cluster", nil))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("selector should render when auth is disabled, got %d", rec.Code)
 		}
@@ -255,7 +255,7 @@ func TestSelectClusterAuthentication(t *testing.T) {
 func TestAuthFilterPassesThroughWhenAuthDisabled(t *testing.T) {
 	s := &ServerHandler{} // authenticator nil => --enable-auth off
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/jobs/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/", nil)
 
 	called := false
 	chain := chainCalling(&called)
@@ -305,6 +305,7 @@ func TestLoginFailureAllowsBrowserRetry(t *testing.T) {
 		{name: "expired token", body: "token=expired-secret&next=%2Fclusters%3Fa%3Db%26c%3Dd", accept: "text/html", status: http.StatusUnauthorized, wantHTML: true},
 		{name: "missing token", body: "next=%2Fclusters", accept: "text/html", status: http.StatusUnauthorized, wantHTML: true},
 		{name: "backend unavailable", body: "token=expired-secret", accept: "text/html", backendDown: true, status: http.StatusServiceUnavailable, wantHTML: true},
+		{name: "oversized form", body: "token=" + strings.Repeat("x", 64<<10), accept: "text/html", status: http.StatusBadRequest, wantHTML: true},
 		{name: "malformed form", body: "token=%zz", accept: "text/html", status: http.StatusBadRequest, wantHTML: true},
 		{name: "unsafe next", body: "token=expired-secret&next=https%3A%2F%2Fevil.test", accept: "text/html", status: http.StatusUnauthorized, wantHTML: true},
 		{name: "JSON client", body: "token=expired-secret", accept: "application/json", status: http.StatusUnauthorized},
@@ -320,7 +321,7 @@ func TestLoginFailureAllowsBrowserRetry(t *testing.T) {
 				}
 				review := action.(k8stesting.CreateAction).GetObject().(*authv1.TokenReview)
 				if review.Spec.Token == "good-token" {
-					return authenticatedReaction("alice")(action)
+					return authenticatedReaction()(action)
 				}
 				return true, &authv1.TokenReview{Status: authv1.TokenReviewStatus{Error: "expired <script>alert(1)</script>"}}, nil
 			})}
