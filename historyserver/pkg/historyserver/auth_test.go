@@ -2,9 +2,12 @@ package historyserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -286,5 +289,104 @@ func emptyChain() *restful.FilterChain {
 func chainCalling(called *bool) *restful.FilterChain {
 	return &restful.FilterChain{
 		Target: func(_ *restful.Request, _ *restful.Response) { *called = true },
+	}
+}
+
+func TestLoginFailureAllowsBrowserRetry(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		body        string
+		accept      string
+		xhr         bool
+		backendDown bool
+		status      int
+		wantHTML    bool
+	}{
+		{name: "expired token", body: "token=expired-secret&next=%2Fclusters%3Fa%3Db%26c%3Dd", accept: "text/html", status: http.StatusUnauthorized, wantHTML: true},
+		{name: "missing token", body: "next=%2Fclusters", accept: "text/html", status: http.StatusUnauthorized, wantHTML: true},
+		{name: "backend unavailable", body: "token=expired-secret", accept: "text/html", backendDown: true, status: http.StatusServiceUnavailable, wantHTML: true},
+		{name: "malformed form", body: "token=%zz", accept: "text/html", status: http.StatusBadRequest, wantHTML: true},
+		{name: "unsafe next", body: "token=expired-secret&next=https%3A%2F%2Fevil.test", accept: "text/html", status: http.StatusUnauthorized, wantHTML: true},
+		{name: "JSON client", body: "token=expired-secret", accept: "application/json", status: http.StatusUnauthorized},
+		{name: "XHR client", body: "token=expired-secret", accept: "text/html", xhr: true, status: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			previousMux := http.DefaultServeMux
+			http.DefaultServeMux = http.NewServeMux()
+			t.Cleanup(func() { http.DefaultServeMux = previousMux })
+			s := &ServerHandler{authCookieMaxAge: DefaultAuthCookieMaxAge, authenticator: newTestAuthenticator(t, func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if tc.backendDown {
+					return true, nil, errors.New("unavailable")
+				}
+				review := action.(k8stesting.CreateAction).GetObject().(*authv1.TokenReview)
+				if review.Spec.Token == "good-token" {
+					return authenticatedReaction("alice")(action)
+				}
+				return true, &authv1.TokenReview{Status: authv1.TokenReviewStatus{Error: "expired <script>alert(1)</script>"}}, nil
+			})}
+			routerAuth(s)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, LoginPath, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Accept", tc.accept)
+			if tc.xhr {
+				req.Header.Set("X-Requested-With", "XMLHttpRequest")
+			}
+			rec := httptest.NewRecorder()
+			http.DefaultServeMux.ServeHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.status)
+			}
+			if len(rec.Result().Cookies()) != 0 {
+				t.Fatal("failed login set cookies")
+			}
+			if rec.Header().Get("Cache-Control") != "no-store" {
+				t.Error("login failure must not be cached")
+			}
+			if strings.Contains(rec.Body.String(), "expired-secret") {
+				t.Fatal("response echoed submitted token")
+			}
+			if !tc.wantHTML {
+				var body struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				}
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				if body.Code != tc.status || body.Message == "" {
+					t.Fatalf("unexpected JSON error: %+v", body)
+				}
+				return
+			}
+			if !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
+				t.Fatal("expected HTML response")
+			}
+			body := rec.Body.String()
+			for _, part := range []string{`role="alert"`, `<form method="POST" action="/login">`, `<textarea name="token"`} {
+				if !strings.Contains(body, part) {
+					t.Errorf("missing %s", part)
+				}
+			}
+			if strings.Contains(body, "<script>") {
+				t.Fatal("error message was not escaped")
+			}
+			values, _ := url.ParseQuery(tc.body)
+			next := safeNext(values.Get("next"))
+			if !strings.Contains(body, `name="next" value="`+htmlAttrEscape(next)+`"`) {
+				t.Error("safe next target not preserved")
+			}
+			if tc.backendDown {
+				return
+			}
+			// A fresh submission from the retry form can complete authentication.
+			form := url.Values{"token": {"good-token"}, "next": {next}}
+			retry := httptest.NewRequestWithContext(t.Context(), http.MethodPost, LoginPath, strings.NewReader(form.Encode()))
+			retry.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			retryRec := httptest.NewRecorder()
+			http.DefaultServeMux.ServeHTTP(retryRec, retry)
+			if retryRec.Code != http.StatusFound || retryRec.Header().Get("Location") != next || len(retryRec.Result().Cookies()) != 1 {
+				t.Fatalf("retry did not complete login: status=%d headers=%v", retryRec.Code, retryRec.Header())
+			}
+		})
 	}
 }

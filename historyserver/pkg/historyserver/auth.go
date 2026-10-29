@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
@@ -252,14 +253,10 @@ func routerAuth(s *ServerHandler) {
 
 		switch r.Method {
 		case http.MethodGet:
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("X-Frame-Options", "DENY")
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'")
-			w.Write(loginPageHTML(safeNext(r.URL.Query().Get("next"))))
+			writeLoginPage(w, http.StatusOK, safeNext(r.URL.Query().Get("next")), "")
 		case http.MethodPost:
 			if err := r.ParseForm(); err != nil {
-				writeAuthError(w, http.StatusBadRequest, "cannot parse login form")
+				writeLoginError(w, r, http.StatusBadRequest, safeNext(r.URL.Query().Get("next")), "cannot parse login form")
 				return
 			}
 			token := strings.TrimSpace(r.PostFormValue("token"))
@@ -268,7 +265,7 @@ func routerAuth(s *ServerHandler) {
 			// Validate before setting any cookie: a rejected credential must not
 			// leave state behind in the browser.
 			if _, err := s.authenticator.Authenticate(r.Context(), token); err != nil {
-				writeAuthError(w, authStatus(err), err.Error())
+				writeLoginError(w, r, authStatus(err), next, err.Error())
 				return
 			}
 
@@ -286,10 +283,31 @@ func routerAuth(s *ServerHandler) {
 	})
 }
 
-// loginPageHTML renders the token entry form. The token is submitted as a form
-// field over POST so it never lands in a URL, the browser history, or logs.
-func loginPageHTML(next string) []byte {
-	return []byte(`<!DOCTYPE html>
+// writeLoginError keeps browser users on the form while API callers retain JSON errors.
+func writeLoginError(w http.ResponseWriter, r *http.Request, status int, next, message string) {
+	w.Header().Set("Cache-Control", "no-store")
+	if wantsHTML(r) {
+		writeLoginPage(w, status, next, message)
+		return
+	}
+	writeAuthError(w, status, message)
+}
+
+func writeLoginPage(w http.ResponseWriter, status int, next, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	if err := loginPageTemplate.Execute(w, struct{ Next, Message string }{Next: next, Message: message}); err != nil {
+		logrus.Errorf("Failed to write login page: %v", err)
+	}
+}
+
+// loginPageTemplate escapes the retry message and next target automatically.
+// The token is submitted only in the POST body and is never echoed into the form.
+var loginPageTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -313,15 +331,15 @@ func loginPageHTML(next string) []byte {
     <h1>Ray History Server</h1>
     <p>Paste a Kubernetes token, for example
        <code>kubectl create token &lt;serviceaccount&gt;</code>.</p>
-    <form method="POST" action="` + LoginPath + `">
-      <input type="hidden" name="next" value="` + htmlAttrEscape(next) + `">
+    {{if .Message}}<p role="alert">{{.Message}}</p>{{end}}
+    <form method="POST" action="/login">
+      <input type="hidden" name="next" value="{{.Next}}">
       <textarea name="token" placeholder="eyJhbGciOi..." autofocus required></textarea>
       <button type="submit">Sign in</button>
     </form>
   </div>
 </body>
-</html>`)
-}
+</html>`))
 
 // htmlAttrEscape escapes a value interpolated into an HTML attribute.
 func htmlAttrEscape(s string) string {
